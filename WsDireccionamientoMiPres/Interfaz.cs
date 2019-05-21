@@ -5,7 +5,7 @@ using System.Data;
 using System.Diagnostics;
 using System.ServiceProcess;
 using WsDireccionamientoMiPresClass;
-using System.Web.Script.Serialization;
+
 using System.Net;
 using System.IO;
 using System.Text.RegularExpressions;
@@ -13,6 +13,8 @@ using Newtonsoft.Json;
 using WsDireccionamientoMiPresClass.Modelos;
 using Anular;
 using System.Timers;
+//using System.Threading;
+using System.Web.Script.Serialization;
 
 namespace WsDireccionamientoMiPres
 {
@@ -22,7 +24,7 @@ namespace WsDireccionamientoMiPres
         bool blBandera = false;
         private WebResponse m_Resp = null;
         Timer timer = new Timer(); // name space(using System.Timers;)  
-
+                                   // Thread objThread;
         public Interfaz()
         {
             InitializeComponent();
@@ -30,16 +32,31 @@ namespace WsDireccionamientoMiPres
 
         protected override void OnStart(string[] args)
         {
+
             // TODO: agregar código aquí para iniciar el servicio.
-            EventLog.WriteEntry("Inicio el proceso de direccionamiento! ", EventLogEntryType.Information);
+            try
+            {
+                timer = new Timer(1000);
+                timer.Elapsed += new ElapsedEventHandler(TimerInterfaz_Elapsed);
+                timer.Start();
+                //objThread = new Thread(new ThreadStart(TimerInterfaz_Elapsed));
+                //objThread.Start();
+                EventLog.WriteEntry("Inicio el proceso de direccionamiento! ", EventLogEntryType.Information);
+            }
+            catch (Exception ex)
+            {
+                EventLog.WriteEntry(ex.Message, EventLogEntryType.Error);
+            }
+
+
             //WriteToFile("Service is started at " + DateTime.Now);
 
-            timer.Elapsed += new ElapsedEventHandler(TimerInterfaz_Elapsed);
+            //timer.Elapsed += new ElapsedEventHandler(TimerInterfaz_Elapsed);
 
-            timer.Interval = 5000; //number in milisecinds  
+            //timer.Interval = 5000; //number in milisecinds  
 
-            timer.Enabled = true;
-            TimerInterfaz.Start();
+            //timer.Enabled = true;
+            //TimerInterfaz.Start();
         }
 
         protected override void OnStop()
@@ -48,6 +65,24 @@ namespace WsDireccionamientoMiPres
             EventLog.WriteEntry("Se detuvo el proceso de direccionamiento! ", EventLogEntryType.Information);
             TimerInterfaz.Stop();
         }
+
+        protected override void OnContinue()
+        {
+            try
+            {
+                timer = new Timer(1000);
+                timer.Elapsed += new ElapsedEventHandler(TimerInterfaz_Elapsed);
+                timer.Start();
+                //objThread = new Thread(new ThreadStart(TimerInterfaz_Elapsed));
+                //objThread.Start();
+                EventLog.WriteEntry("Inicio el proceso de direccionamiento! ", EventLogEntryType.Information);
+            }
+            catch (Exception ex)
+            {
+                EventLog.WriteEntry(ex.Message, EventLogEntryType.Information);
+            }
+        }
+
 
         private void TimerInterfaz_Elapsed(object sender, System.Timers.ElapsedEventArgs e)
         {
@@ -66,99 +101,58 @@ namespace WsDireccionamientoMiPres
                 ClsDireccionamientoMiPres ObjClsDireccionamientoMiPres = new ClsDireccionamientoMiPres();
 
                 var ParametrizacionDireccionamiento = ObjClsDireccionamientoMiPres.ConsultarParametrizacionMipres("Direccionamiento/", ref MsjError);
-
-                string Url = ParametrizacionDireccionamiento.Rows[0][0].ToString();
-                string Metodo = ParametrizacionDireccionamiento.Rows[0][1].ToString();
-                string strNoPrescripcion = "";
-                Nit = ParametrizacionDireccionamiento.Rows[0][2].ToString();
-                Token = ParametrizacionDireccionamiento.Rows[0][3].ToString();
-
-                //Obtenemos los Datos que se van a procesar
-                var DtDireccionamientoPendiente = ObjClsDireccionamientoMiPres.ConsultarDireccionamientosPendientes(ref MsjError);
-
-                if (DtDireccionamientoPendiente.Rows.Count > 0)
+                if (ParametrizacionDireccionamiento.Rows.Count > 0)
                 {
-                    //Convertir los Datos a Formato JSON
-                    var strDatos = DataTableToJSONWithJavaScriptSerializer(DtDireccionamientoPendiente);
-                    if (strDatos != "[]")
+                    string Url = ParametrizacionDireccionamiento.Rows[0][0].ToString();
+                    string Metodo = ParametrizacionDireccionamiento.Rows[0][1].ToString();
+                    string strNoPrescripcion = "";
+                    string strConOrden = "";
+                    Nit = ParametrizacionDireccionamiento.Rows[0][2].ToString();
+                    Token = ParametrizacionDireccionamiento.Rows[0][3].ToString();
+
+                    //Obtenemos los Datos que se van a procesar
+                    var DtDireccionamientoPendiente = ObjClsDireccionamientoMiPres.ConsultarDireccionamientosPendientes(ref MsjError);
+
+                    if (DtDireccionamientoPendiente.Rows.Count > 0)
                     {
-                        strNoPrescripcion = DtDireccionamientoPendiente.Rows[0][0].ToString();
-
-                        //Se eliminan las llaves rectas del JSON para que sean procesados por el servicio web del ministerio
-                        strDatos = strDatos.Replace("[", "");
-                        strDatos = strDatos.Replace("]", "");
-
-                        //ConsultarNUAMiPres
-                        var DtNUAMiPres = ObjClsDireccionamientoMiPres.ConsultarNUAMiPresPendiente(strNoPrescripcion, ref MsjError);
-
-                        //Se inicia la peticion hacia el ministerio
-                        using (var client = new WebClient())
+                        //Convertir los Datos a Formato JSON
+                        var strDatos = DataTableToJSONWithJavaScriptSerializer(DtDireccionamientoPendiente);
+                        if (strDatos != "[]")
                         {
+                            strNoPrescripcion = DtDireccionamientoPendiente.Rows[0][0].ToString();
+                            strConOrden = DtDireccionamientoPendiente.Rows[0][2].ToString();
 
-                            try
+                            //Se eliminan las llaves rectas del JSON para que sean procesados por el servicio web del ministerio
+                            strDatos = strDatos.Replace("[", "");
+                            strDatos = strDatos.Replace("]", "");
+
+                            //ConsultarNUAMiPres
+                            var DtNUAMiPres = ObjClsDireccionamientoMiPres.ConsultarNUAMiPresPendiente(strNoPrescripcion, strConOrden, ref MsjError);
+
+                            //Se inicia la peticion hacia el ministerio
+                            using (var client = new WebClient())
                             {
-                                //Generacion de la url
-                                Uri uri = new Uri(Url.Trim() + Metodo.Trim() + Nit.Trim() + Token.Trim());
 
-                                //Definicion de tipo de contenido de la peticion
-                                client.Headers.Add("Content-Type", "text/json");
-
-                                //Relizamos Peticion                        
-
-                                var rawResponse = client.UploadString(uri, "PUT", strDatos.ToString());
-
-                                rawResponse = rawResponse.Replace("[", "");
-                                rawResponse = rawResponse.Replace("]", "");
-
-                                MinRespuesta result = JsonConvert.DeserializeObject<MinRespuesta>(rawResponse);
-
-                                if (!string.IsNullOrEmpty(rawResponse))
+                                try
                                 {
-                                    ObjClsDireccionamientoMiPres.RegistrarREsultado(strNoPrescripcion, digits, rawResponse
-                                                                                                             , string.Empty
-                                                                                                             , string.Empty
-                                                                                                             , string.Empty
-                                                                                                             , string.Empty
-                                                                                                             , string.Empty
-                                                                                                             , string.Empty
-                                                                                                             , string.Empty
-                                                                                                             , string.Empty
-                                                                                                             , string.Empty
-                                                                                                             , string.Empty
-                                                                                                             , string.Empty
-                                                                                                             , string.Empty
-                                                                                                             , string.Empty
-                                                                                                             , string.Empty
-                                                                                                             , result.Id.ToString()
-                                                                                                             , result.IdDireccionamiento.ToString()
-                                                                                                             , string.Empty
-                                                                                                             , DtNUAMiPres.Rows[0][0].ToString()
-                                                                                                             , DateTime.Now.ToString("dd/MM/yyyy hh:mm:ss tt")
-                                                                                                             , "Enviado");
-                                }
+                                    //Generacion de la url
+                                    Uri uri = new Uri(Url.Trim() + Metodo.Trim() + Nit.Trim() + Token.Trim());
 
-                            }
+                                    //Definicion de tipo de contenido de la peticion
+                                    client.Headers.Add("Content-Type", "application/json; charset=utf-8");
 
-                            catch (WebException ex)
-                            {
-                                //WriteToFile("Simple Service Error on: {0} " + ex.Message + ex.StackTrace);
-                                using (StreamReader r = new StreamReader(ex.Response.GetResponseStream()))
-                                {
-                                    Match match;
-                                    //Se obtiene el codigo de respuesta Ej (400-200)
-                                    match = Regex.Match(ex.Message, @"\((\d+)\)");
-                                    if (match.Success)
+                                    //Relizamos Peticion                        
+
+                                    var rawResponse = client.UploadString(uri, "PUT", strDatos.ToString());
+
+                                    rawResponse = rawResponse.Replace("[", "");
+                                    rawResponse = rawResponse.Replace("]", "");
+
+                                    MinRespuesta result = JsonConvert.DeserializeObject<MinRespuesta>(rawResponse);
+
+                                    if (!string.IsNullOrEmpty(rawResponse))
                                     {
-                                        digits = match.Groups[1].Value;
-                                    }
-                                    //Mensaje que respondio el servicio
-                                    string responseContent = r.ReadToEnd();
-
-                                    MinRespuesta result = JsonConvert.DeserializeObject<MinRespuesta>(responseContent);
-
-                                    if (result.ModelState == null)
-                                    {
-                                        ObjClsDireccionamientoMiPres.RegistrarREsultado(strNoPrescripcion, digits, result.Message
+                                        ObjClsDireccionamientoMiPres.RegistrarREsultado(strNoPrescripcion, digits, rawResponse
                                                                                                                  , string.Empty
                                                                                                                  , string.Empty
                                                                                                                  , string.Empty
@@ -173,48 +167,93 @@ namespace WsDireccionamientoMiPres
                                                                                                                  , string.Empty
                                                                                                                  , string.Empty
                                                                                                                  , string.Empty
+                                                                                                                 , result.Id.ToString()
+                                                                                                                 , result.IdDireccionamiento.ToString()
                                                                                                                  , string.Empty
-                                                                                                                 , string.Empty
-                                                                                                                 , result.Errors[0]
                                                                                                                  , DtNUAMiPres.Rows[0][0].ToString()
-                                                                                                                 , ""
-                                                                                                                 , "Fallido");
-
+                                                                                                                 , DateTime.Now.ToString("dd/MM/yyyy hh:mm:ss tt")
+                                                                                                                 , "Enviado");
                                     }
-                                    else
+
+                                }
+
+                                catch (WebException ex)
+                                {
+                                    //WriteToFile("Simple Service Error on: {0} " + ex.Message + ex.StackTrace);
+                                    using (StreamReader r = new StreamReader(ex.Response.GetResponseStream()))
                                     {
-                                        ObjClsDireccionamientoMiPres.RegistrarREsultado(strNoPrescripcion, digits, result.Message
-                                                    , result.ModelState.DireccionamientoNoPrescripcion == null ? "" : result.ModelState.DireccionamientoNoPrescripcion[0].ToString()
-                                                    , result.ModelState.DireccionamientoTipoTec == null ? "" : result.ModelState.DireccionamientoTipoTec[0].ToString()
-                                                    , result.ModelState.DireccionamientoConTec == null ? "" : result.ModelState.DireccionamientoConTec[0].ToString()
-                                                    , result.ModelState.DireccionamientoTipoIDPaciente == null ? "" : result.ModelState.DireccionamientoTipoIDPaciente[0].ToString()
-                                                    , result.ModelState.DireccionamientoNoIDPaciente == null ? "" : result.ModelState.DireccionamientoNoIDPaciente[0].ToString()
-                                                    , result.ModelState.DireccionamientoNoEntrega == null ? "" : result.ModelState.DireccionamientoNoEntrega[0].ToString()
-                                                    , result.ModelState.DireccionamientoNoSubEntrega == null ? "" : result.ModelState.DireccionamientoNoSubEntrega[0].ToString()
-                                                    , result.ModelState.DireccionamientoTipoIDProv == null ? "" : result.ModelState.DireccionamientoTipoIDProv[0].ToString()
-                                                    , result.ModelState.DireccionamientoNoIDProv == null ? "" : result.ModelState.DireccionamientoNoIDProv[0].ToString()
-                                                    , result.ModelState.DireccionamientoCodMunEnt == null ? "" : result.ModelState.DireccionamientoCodMunEnt[0].ToString()
-                                                    , result.ModelState.DireccionamientoFecMaxEnt == null ? "" : result.ModelState.DireccionamientoFecMaxEnt[0].ToString()
-                                                    , result.ModelState.DireccionamientoCantTotAEntregar == null ? "" : result.ModelState.DireccionamientoCantTotAEntregar[0].ToString()
-                                                    , result.ModelState.DireccionamientoDirPaciente == null ? "" : result.ModelState.DireccionamientoDirPaciente[0].ToString()
-                                                    , result.ModelState.DireccionamientoCodSerTecAEntregar == null ? "" : result.ModelState.DireccionamientoCodSerTecAEntregar[0].ToString()
-                                                    , string.Empty
-                                                    , string.Empty
-                                                    , result.Errors[0]
-                                                    , DtNUAMiPres.Rows[0][0].ToString()
-                                                    , ""
-                                                    , "Fallido");
+                                        Match match;
+                                        //Se obtiene el codigo de respuesta Ej (400-200)
+                                        match = Regex.Match(ex.Message, @"\((\d+)\)");
+                                        if (match.Success)
+                                        {
+                                            digits = match.Groups[1].Value;
+                                        }
+                                        //Mensaje que respondio el servicio
+                                        string responseContent = r.ReadToEnd();
+
+                                        MinRespuesta result = JsonConvert.DeserializeObject<MinRespuesta>(responseContent);
+
+                                        if (result.ModelState == null)
+                                        {
+                                            ObjClsDireccionamientoMiPres.RegistrarREsultado(strNoPrescripcion, digits, result.Message
+                                                                                                                     , string.Empty
+                                                                                                                     , string.Empty
+                                                                                                                     , string.Empty
+                                                                                                                     , string.Empty
+                                                                                                                     , string.Empty
+                                                                                                                     , string.Empty
+                                                                                                                     , string.Empty
+                                                                                                                     , string.Empty
+                                                                                                                     , string.Empty
+                                                                                                                     , string.Empty
+                                                                                                                     , string.Empty
+                                                                                                                     , string.Empty
+                                                                                                                     , string.Empty
+                                                                                                                     , string.Empty
+                                                                                                                     , string.Empty
+                                                                                                                     , string.Empty
+                                                                                                                     , result.Errors.Count == 0 ? "" : result.Errors[0].ToString()
+                                                                                                                     , DtNUAMiPres.Rows[0][0].ToString()
+                                                                                                                     , ""
+                                                                                                                     , "Fallido");
+
+                                        }
+                                        else
+                                        {
+                                            ObjClsDireccionamientoMiPres.RegistrarREsultado(strNoPrescripcion, digits, result.Message
+                                                        , result.ModelState.DireccionamientoNoPrescripcion == null ? "" : result.ModelState.DireccionamientoNoPrescripcion[0].ToString()
+                                                        , result.ModelState.DireccionamientoTipoTec == null ? "" : result.ModelState.DireccionamientoTipoTec[0].ToString()
+                                                        , result.ModelState.DireccionamientoConTec == null ? "" : result.ModelState.DireccionamientoConTec[0].ToString()
+                                                        , result.ModelState.DireccionamientoTipoIDPaciente == null ? "" : result.ModelState.DireccionamientoTipoIDPaciente[0].ToString()
+                                                        , result.ModelState.DireccionamientoNoIDPaciente == null ? "" : result.ModelState.DireccionamientoNoIDPaciente[0].ToString()
+                                                        , result.ModelState.DireccionamientoNoEntrega == null ? "" : result.ModelState.DireccionamientoNoEntrega[0].ToString()
+                                                        , result.ModelState.DireccionamientoNoSubEntrega == null ? "" : result.ModelState.DireccionamientoNoSubEntrega[0].ToString()
+                                                        , result.ModelState.DireccionamientoTipoIDProv == null ? "" : result.ModelState.DireccionamientoTipoIDProv[0].ToString()
+                                                        , result.ModelState.DireccionamientoNoIDProv == null ? "" : result.ModelState.DireccionamientoNoIDProv[0].ToString()
+                                                        , result.ModelState.DireccionamientoCodMunEnt == null ? "" : result.ModelState.DireccionamientoCodMunEnt[0].ToString()
+                                                        , result.ModelState.DireccionamientoFecMaxEnt == null ? "" : result.ModelState.DireccionamientoFecMaxEnt[0].ToString()
+                                                        , result.ModelState.DireccionamientoCantTotAEntregar == null ? "" : result.ModelState.DireccionamientoCantTotAEntregar[0].ToString()
+                                                        , result.ModelState.DireccionamientoDirPaciente == null ? "" : result.ModelState.DireccionamientoDirPaciente[0].ToString()
+                                                        , result.ModelState.DireccionamientoCodSerTecAEntregar == null ? "" : result.ModelState.DireccionamientoCodSerTecAEntregar[0].ToString()
+                                                        , string.Empty
+                                                        , string.Empty
+                                                        , result.Errors.Count == 0 ? "" : result.Errors[0].ToString()
+                                                        , DtNUAMiPres.Rows[0][0].ToString()
+                                                        , ""
+                                                        , "Fallido");
+                                        }
                                     }
                                 }
-                            }
 
+                            }
                         }
                     }
-                }
-                else
-                {
-                    //  WriteToFile("No se encontraron direccionamientos pendientes de envio " + DateTime.Now.ToString("dd/MM/yyyy hh:mm:ss tt"));
-                    EventLog.WriteEntry("No se encontraron direccionamientos pendientes de envio" + DateTime.Now.ToString("dd/MM/yyyy hh:mm:ss tt"), EventLogEntryType.Information);
+                    else
+                    {
+                        //  WriteToFile("No se encontraron direccionamientos pendientes de envio " + DateTime.Now.ToString("dd/MM/yyyy hh:mm:ss tt"));
+                        EventLog.WriteEntry("No se encontraron direccionamientos pendientes de envio" + DateTime.Now.ToString("dd/MM/yyyy hh:mm:ss tt"), EventLogEntryType.Information);
+                    }
                 }
             }
             catch (Exception ex)
@@ -234,89 +273,91 @@ namespace WsDireccionamientoMiPres
                 ClsDireccionamientoMiPres ObjClsDireccionamientoMiPres = new ClsDireccionamientoMiPres();
                 var ParametrizacionDireccionamiento = ObjClsDireccionamientoMiPres.ConsultarParametrizacionMipres("AnularDireccionamiento/", ref MsjError);
 
-
-                string Url = ParametrizacionDireccionamiento.Rows[0][0].ToString();
-                string Metodo = ParametrizacionDireccionamiento.Rows[0][1].ToString();
-                string strNoPrescripcion = "";
-                Nit = ParametrizacionDireccionamiento.Rows[0][2].ToString();
-                Token = ParametrizacionDireccionamiento.Rows[0][3].ToString();
-
-                //Armado de la Url para realizar la solicitud de la api
-                string strNoPrescripcionAnular = "";
-                string Direccionamiento = "";
-
-                //Obtenemos los Datos que se van a procesar
-                var DtDireccionamientoPendiente = ObjClsDireccionamientoMiPres.ConsultarDireccionamientosAnular(ref MsjError);
-                //DtDireccionamientoPendiente.Rows[0][0]
-
-                if (DtDireccionamientoPendiente.Rows.Count > 0)
+                if (ParametrizacionDireccionamiento.Rows.Count > 0)
                 {
-                    strNoPrescripcionAnular = (DtDireccionamientoPendiente.Rows[0][1]).ToString();
+                    string Url = ParametrizacionDireccionamiento.Rows[0][0].ToString();
+                    string Metodo = ParametrizacionDireccionamiento.Rows[0][1].ToString();
+                    string strNoPrescripcion = "";
+                    Nit = ParametrizacionDireccionamiento.Rows[0][2].ToString();
+                    Token = ParametrizacionDireccionamiento.Rows[0][3].ToString();
 
-                    //ConsultarNUAMiPres
-                    var DtNUAMiPres = ObjClsDireccionamientoMiPres.ConsultarNUAMiPresAnular(strNoPrescripcionAnular, ref MsjError);
-                    //Se inicia la peticion hacia el ministerio
-                    using (var client = new WebClient())
+                    //Armado de la Url para realizar la solicitud de la api
+                    string strNoPrescripcionAnular = "";
+                    string Direccionamiento = "";
+
+                    //Obtenemos los Datos que se van a procesar
+                    var DtDireccionamientoPendiente = ObjClsDireccionamientoMiPres.ConsultarDireccionamientosAnular(ref MsjError);
+                    //DtDireccionamientoPendiente.Rows[0][0]
+
+                    if (DtDireccionamientoPendiente.Rows.Count > 0)
                     {
+                        strNoPrescripcionAnular = (DtDireccionamientoPendiente.Rows[0][1]).ToString();
 
-                        try
+                        //ConsultarNUAMiPres
+                        var DtNUAMiPres = ObjClsDireccionamientoMiPres.ConsultarNUAMiPresAnular(strNoPrescripcionAnular, ref MsjError);
+                        //Se inicia la peticion hacia el ministerio
+                        using (var client = new WebClient())
                         {
 
-                            Direccionamiento = (DtDireccionamientoPendiente.Rows[0][0]).ToString();
-
-
-                            //Generacion de la url
-                            Uri uri = new Uri(Url.Trim() + Metodo.Trim() + Nit.Trim() + Token.Trim() + "/" + Direccionamiento);
-
-                            //Definicion de tipo de contenido de la peticion
-                            //client.Headers.Add("Content-Type", "text/json");
-
-                            //Relizamos Peticion                        
-
-                            var rawResponse = client.UploadString(uri, "PUT", "");
-
-
-                            rawResponse = rawResponse.Replace("[", "");
-                            rawResponse = rawResponse.Replace("]", "");
-
-                            AnularDireccionamiento result = JsonConvert.DeserializeObject<AnularDireccionamiento>(rawResponse);
-
-                            if (!string.IsNullOrEmpty(rawResponse))
+                            try
                             {
-                                ObjClsDireccionamientoMiPres.RegistrarResultadoAnular(strNoPrescripcionAnular, Direccionamiento, string.Empty, string.Empty, result.Mensaje, DtNUAMiPres.Rows[0][0].ToString(), "Anulado");
-                            }
-                        }
-                        catch (WebException ex)
-                        {
-                            //WriteToFile("Simple Service Error on: {0} " + ex.Message + ex.StackTrace);
-                            using (StreamReader r = new StreamReader(ex.Response.GetResponseStream()))
-                            {
-                                string responseContent = r.ReadToEnd();
-                                Match match;
-                                //Se obtiene el codigo de respuesta Ej (400-200)
-                                match = Regex.Match(ex.Message, @"\((\d+)\)");
-                                if (match.Success)
-                                {
-                                    digits = match.Groups[1].Value;
-                                }
-                                //Mensaje que respondio el servicio
 
-                                AnularDireccionamiento result = JsonConvert.DeserializeObject<AnularDireccionamiento>(responseContent);
+                                Direccionamiento = (DtDireccionamientoPendiente.Rows[0][0]).ToString();
 
-                                if (result.Errors != null)
+
+                                //Generacion de la url
+                                Uri uri = new Uri(Url.Trim() + Metodo.Trim() + Nit.Trim() + Token.Trim() + "/" + Direccionamiento);
+
+                                //Definicion de tipo de contenido de la peticion
+                                //client.Headers.Add("Content-Type", "text/json");
+
+                                //Relizamos Peticion                        
+
+                                var rawResponse = client.UploadString(uri, "PUT", "");
+
+
+                                rawResponse = rawResponse.Replace("[", "");
+                                rawResponse = rawResponse.Replace("]", "");
+
+                                AnularDireccionamiento result = JsonConvert.DeserializeObject<AnularDireccionamiento>(rawResponse);
+
+                                if (!string.IsNullOrEmpty(rawResponse))
                                 {
-                                    ObjClsDireccionamientoMiPres.RegistrarResultadoAnular(strNoPrescripcionAnular, Direccionamiento, string.Empty, result.Errors[0], result.Message, DtNUAMiPres.Rows[0][0].ToString(), "Anulado Fallido");
+                                    ObjClsDireccionamientoMiPres.RegistrarResultadoAnular(strNoPrescripcionAnular, Direccionamiento, string.Empty, string.Empty, result.Mensaje, DtNUAMiPres.Rows[0][0].ToString(), "Anulado");
                                 }
                             }
+                            catch (WebException ex)
+                            {
+                                //WriteToFile("Simple Service Error on: {0} " + ex.Message + ex.StackTrace);
+                                using (StreamReader r = new StreamReader(ex.Response.GetResponseStream()))
+                                {
+                                    string responseContent = r.ReadToEnd();
+                                    Match match;
+                                    //Se obtiene el codigo de respuesta Ej (400-200)
+                                    match = Regex.Match(ex.Message, @"\((\d+)\)");
+                                    if (match.Success)
+                                    {
+                                        digits = match.Groups[1].Value;
+                                    }
+                                    //Mensaje que respondio el servicio
 
-                            //EventLog.WriteEntry(ex.Message, EventLogEntryType.Error);
+                                    AnularDireccionamiento result = JsonConvert.DeserializeObject<AnularDireccionamiento>(responseContent);
+
+                                    if (result.Errors != null)
+                                    {
+                                        ObjClsDireccionamientoMiPres.RegistrarResultadoAnular(strNoPrescripcionAnular, Direccionamiento, string.Empty, result.Errors[0], result.Message, DtNUAMiPres.Rows[0][0].ToString(), "Anulado Fallido");
+                                    }
+                                }
+
+                                //EventLog.WriteEntry(ex.Message, EventLogEntryType.Error);
+                            }
                         }
                     }
-                }
-                else
-                {
-                    //WriteToFile("No se encontraron direccionamientos pendientes de anular " + DateTime.Now.ToString("dd/MM/yyyy hh:mm:ss tt"));
-                    EventLog.WriteEntry("No se encontraron direccionamientos pendientes de anular" + DateTime.Now.ToString("dd/MM/yyyy hh:mm:ss tt"), EventLogEntryType.Information);
+                    else
+                    {
+                        //WriteToFile("No se encontraron direccionamientos pendientes de anular " + DateTime.Now.ToString("dd/MM/yyyy hh:mm:ss tt"));
+                        EventLog.WriteEntry("No se encontraron direccionamientos pendientes de anular" + DateTime.Now.ToString("dd/MM/yyyy hh:mm:ss tt"), EventLogEntryType.Information);
+                    }
                 }
             }
             catch (Exception ex)
@@ -327,6 +368,7 @@ namespace WsDireccionamientoMiPres
             #endregion
 
             blBandera = false;
+            //Thread.Sleep(Convert.ToInt32(ConfigurationSettings.AppSettings["TimerProceso"].ToString()));
 
         }
 
@@ -383,14 +425,14 @@ namespace WsDireccionamientoMiPres
 
         }
 
-        private void WriteToFile(string text)
-        {
-            string path = "C:\\ServiceLog.txt";
-            using (StreamWriter writer = new StreamWriter(path, true))
-            {
-                writer.WriteLine(string.Format(text, DateTime.Now.ToString("dd/MM/yyyy hh:mm:ss tt")));
-                writer.Close();
-            }
-        }
+        //private void WriteToFile(string text)
+        //{
+        //    string path = "C:\\ServiceLog.txt";
+        //    using (StreamWriter writer = new StreamWriter(path, true))
+        //    {
+        //        writer.WriteLine(string.Format(text, DateTime.Now.ToString("dd/MM/yyyy hh:mm:ss tt")));
+        //        writer.Close();
+        //    }
+        //}
     }
 }

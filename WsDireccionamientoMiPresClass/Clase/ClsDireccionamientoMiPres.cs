@@ -146,7 +146,7 @@ namespace WsDireccionamientoMiPresClass
         }
 
 
-        public DataTable ConsultarNUAMiPresPendiente(string strNoPrescripcion, ref string MsjError)
+        public DataTable ConsultarNUAMiPresPendiente(string strNoPrescripcion,string strConOrden, ref string MsjError)
         {
 
             clsDataServices objDatalayer = new clsDataServices();
@@ -155,6 +155,7 @@ namespace WsDireccionamientoMiPresClass
             try
             {
                 objDatalayer.AddGenericParameter("@NOPRESCRIPCION", DbType.String, ParameterDirection.Input, strNoPrescripcion);
+                objDatalayer.AddGenericParameter("@CONORDEN", DbType.String, ParameterDirection.Input, strConOrden);
                 ObjDT = (DataTable)objDatalayer.ExecuteStoredProcedure("P_PS_MIPRES_CONSULTAR_NUA_PENDIENTE", ReturnType.DatatableType);
 
                 return ObjDT;

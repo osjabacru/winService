@@ -13,14 +13,8 @@ namespace Anular
     [Obfuscation(Feature = "trigger", Exclude = false)]
     public class AnularDireccionamiento
     {
-
-        [JsonProperty("Message")]
         public string Message { get; set; }
-
-        [JsonProperty("Errors")]
         public IList<string> Errors { get; set; }
-
-        [JsonProperty("Mensaje")]
         public string Mensaje { get; set; }
     }
 
